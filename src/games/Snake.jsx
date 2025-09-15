@@ -6,24 +6,39 @@ const BOARD_SIZE = 15;
 const INITIAL_SNAKE = [[7, 7]];
 const MOVE_INTERVAL = 200;
 
+// ✅ Safe food generation (never spawns inside snake)
+function generateFood(snakeCells = []) {
+  let newFood;
+  let attempts = 0;
+  do {
+    newFood = [
+      Math.floor(Math.random() * BOARD_SIZE),
+      Math.floor(Math.random() * BOARD_SIZE)
+    ];
+    attempts++;
+  } while (
+    snakeCells.some(([x, y]) => x === newFood[0] && y === newFood[1]) &&
+    attempts < 100
+  );
+  return newFood;
+}
+
 export default function Snake() {
   const [snake, setSnake] = useState(INITIAL_SNAKE);
-  const [food, setFood] = useState(generateFood());
+  const [food, setFood] = useState(generateFood(INITIAL_SNAKE));
   const [dir, setDir] = useState("RIGHT");
   const [gameOver, setGameOver] = useState(false);
   const [highScore, setHighScore] = useState(0);
   const [timePlayed, setTimePlayed] = useState(0);
 
-  // refs for interval and mutable snake/dir for reliable moves
+  // refs for reliable game loop
   const snakeRef = useRef(snake);
+  const foodRef = useRef(food); // Added food ref
   const dirRef = useRef(dir);
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
 
-  function generateFood() {
-    return [Math.floor(Math.random() * BOARD_SIZE), Math.floor(Math.random() * BOARD_SIZE)];
-  }
-
+  // ✅ Fixed moveSnake - using foodRef instead of food state
   const moveSnake = () => {
     const currentSnake = snakeRef.current;
     const currentDir = dirRef.current;
@@ -38,7 +53,7 @@ export default function Snake() {
       default: newHead = head;
     }
 
-    // Collision detection
+    // collision detection
     if (
       newHead[0] < 0 || newHead[0] >= BOARD_SIZE ||
       newHead[1] < 0 || newHead[1] >= BOARD_SIZE ||
@@ -52,23 +67,29 @@ export default function Snake() {
 
     let newSnake = [...currentSnake, newHead];
 
-    // Eating food
-    if (newHead[0] === food[0] && newHead[1] === food[1]) {
-      setFood(generateFood());
-      if (newSnake.length > highScore) setHighScore(newSnake.length);
+    // ✅ Eat food using foodRef instead of food state
+    if (newHead[0] === foodRef.current[0] && newHead[1] === foodRef.current[1]) {
+      const freshFood = generateFood(newSnake);
+      setFood(freshFood);
+      foodRef.current = freshFood; // Update food ref
+      if (newSnake.length > highScore) {
+        setHighScore(newSnake.length);
+      }
     } else {
-      newSnake.shift(); // remove tail
+      // normal move (remove tail)
+      newSnake.shift();
     }
 
     setSnake(newSnake);
-    snakeRef.current = newSnake; // update ref
+    snakeRef.current = newSnake;
   };
 
   const handleKey = (e) => {
-    const newDir = e.key === "ArrowUp" ? "UP"
-      : e.key === "ArrowDown" ? "DOWN"
-      : e.key === "ArrowLeft" ? "LEFT"
-      : e.key === "ArrowRight" ? "RIGHT" : dirRef.current;
+    const newDir =
+      e.key === "ArrowUp" ? "UP" :
+      e.key === "ArrowDown" ? "DOWN" :
+      e.key === "ArrowLeft" ? "LEFT" :
+      e.key === "ArrowRight" ? "RIGHT" : dirRef.current;
 
     // prevent reverse direction
     if (
@@ -77,8 +98,8 @@ export default function Snake() {
       (newDir === "LEFT" && dirRef.current !== "RIGHT") ||
       (newDir === "RIGHT" && dirRef.current !== "LEFT")
     ) {
-      setDir(newDir);
       dirRef.current = newDir;
+      setDir(newDir);
     }
   };
 
@@ -89,16 +110,21 @@ export default function Snake() {
       (newDir === "LEFT" && dirRef.current !== "RIGHT") ||
       (newDir === "RIGHT" && dirRef.current !== "LEFT")
     ) {
-      setDir(newDir);
       dirRef.current = newDir;
+      setDir(newDir);
     }
   };
 
   const resetGame = () => {
-    const initialSnake = [[Math.floor(BOARD_SIZE/2), Math.floor(BOARD_SIZE/2)]];
+    const initialSnake = [[Math.floor(BOARD_SIZE / 2), Math.floor(BOARD_SIZE / 2)]];
+    const initialFood = generateFood(initialSnake);
+    
     setSnake(initialSnake);
     snakeRef.current = initialSnake;
-    setFood(generateFood());
+    
+    setFood(initialFood);
+    foodRef.current = initialFood;
+    
     setDir("RIGHT");
     dirRef.current = "RIGHT";
     setGameOver(false);
@@ -112,6 +138,9 @@ export default function Snake() {
   };
 
   useEffect(() => {
+    // Initialize food ref
+    foodRef.current = food;
+    
     document.addEventListener("keydown", handleKey);
     timerRef.current = setInterval(() => setTimePlayed(prev => prev + 1), 1000);
     intervalRef.current = setInterval(moveSnake, MOVE_INTERVAL);
@@ -140,7 +169,12 @@ export default function Snake() {
               {[...Array(BOARD_SIZE)].map((_, col) => {
                 const isSnake = snake.some(([x, y]) => x === col && y === row);
                 const isFood = food[0] === col && food[1] === row;
-                return <div key={col} className={`cell ${isSnake ? "snake" : ""} ${isFood ? "food" : ""}`}></div>;
+                return (
+                  <div
+                    key={col}
+                    className={`cell ${isSnake ? "snake" : ""} ${isFood ? "food" : ""}`}
+                  ></div>
+                );
               })}
             </div>
           ))}
@@ -148,9 +182,12 @@ export default function Snake() {
 
         {gameOver && <div className="gameover">Game Over!</div>}
 
-        <button className="reset-btn" onClick={resetGame}>
-          Reset Game
-        </button>
+        {/* ✅ Fixed Reset Button */}
+        <div className="reset-btn-container">
+          <button className="reset-btn" onClick={resetGame}>
+            Reset Game
+          </button>
+        </div>
 
         {/* Mobile Controls */}
         <div className="mobile-controls">
